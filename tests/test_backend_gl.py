@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from matplotlib._pylab_helpers import Gcf
 
 import pytest
-
+pytestmark = pytest.mark.backend('module://mplopengl.backend_qtgl')
 
 @pytest.fixture(autouse=True)
 def mpl_test_settings(qt_module, mpl_test_settings):
@@ -92,7 +92,6 @@ def test_fig_close(backend):
     assert init_figs == Gcf.figs
 
 
-@pytest.mark.backend('module://mplopengl.backend_qtgl')
 def test_fig_signals(qt_module):
     # Create a figure
     fig = plt.figure()
@@ -197,70 +196,69 @@ def test_correct_key(backend, qt_key, qt_mods, answer):
     qt_canvas.keyPressEvent(event)
 
 
-@pytest.mark.backend('module://mplopengl.backend_qtgl')
-def test_dpi_ratio_change():
-    """
-    Make sure that if _dpi_ratio changes, the figure dpi changes but the
-    widget remains the same physical size.
-    """
+# @pytest.mark.backend('module://mplopengl.backend_qtgl')
+# def test_dpi_ratio_change():
+#     """
+#     Make sure that if _dpi_ratio changes, the figure dpi changes but the
+#     widget remains the same physical size.
+#     """
+#
+#     prop = 'matplotlib.backends.backend_qt5.FigureCanvasQT._dpi_ratio'
+#
+#     with mock.patch(prop, new_callable=mock.PropertyMock) as p:
+#
+#         p.return_value = 3
+#
+#         fig = plt.figure(figsize=(5, 2), dpi=120)
+#         qt_canvas = fig.canvas
+#         qt_canvas.show()
+#
+#         from matplotlib.backends.backend_qt5 import qApp
+#
+#         # Make sure the mocking worked
+#         assert qt_canvas._dpi_ratio == 3
+#
+#         size = qt_canvas.size()
+#
+#         qt_canvas.manager.show()
+#         qt_canvas.draw()
+#         qApp.processEvents()
+#
+#         # The DPI and the renderer width/height change
+#         assert fig.dpi == 360
+#         #assert qt_canvas.canvas.renderer.width == 1800
+#         #assert qt_canvas.canvas.renderer.height == 720
+#
+#         # The actual widget size and figure physical size don't change
+#         assert size.width() == 600
+#         assert size.height() == 240
+#         #assert qt_canvas.get_width_height() == (600, 240)
+#         #assert (fig.get_size_inches() == (5, 2)).all()
+#
+#         p.return_value = 2
+#
+#         assert qt_canvas._dpi_ratio == 2
+#
+#         qt_canvas.draw()
+#         qApp.processEvents()
+#         # this second processEvents is required to fully run the draw.
+#         # On `update` we notice the DPI has changed and trigger a
+#         # resize event to refresh, the second processEvents is
+#         # required to process that and fully update the window sizes.
+#         qApp.processEvents()
+#
+#         # The DPI and the renderer width/height change
+#         assert fig.dpi == 240
+#         #assert qt_canvas.canvas.renderer.width == 1200
+#         #assert qt_canvas.canvas.renderer.height == 480
+#
+#         # The actual widget size and figure physical size don't change
+#         assert size.width() == 600
+#         assert size.height() == 240
+#         #assert qt_canvas.get_width_height() == (600, 240)
+#         #assert (fig.get_size_inches() == (5, 2)).all()
 
-    prop = 'matplotlib.backends.backend_qt5.FigureCanvasQT._dpi_ratio'
 
-    with mock.patch(prop, new_callable=mock.PropertyMock) as p:
-
-        p.return_value = 3
-
-        fig = plt.figure(figsize=(5, 2), dpi=120)
-        qt_canvas = fig.canvas
-        qt_canvas.show()
-
-        from matplotlib.backends.backend_qt5 import qApp
-
-        # Make sure the mocking worked
-        assert qt_canvas._dpi_ratio == 3
-
-        size = qt_canvas.size()
-
-        qt_canvas.manager.show()
-        qt_canvas.draw()
-        qApp.processEvents()
-
-        # The DPI and the renderer width/height change
-        assert fig.dpi == 360
-        #assert qt_canvas.canvas.renderer.width == 1800
-        #assert qt_canvas.canvas.renderer.height == 720
-
-        # The actual widget size and figure physical size don't change
-        assert size.width() == 600
-        assert size.height() == 240
-        #assert qt_canvas.get_width_height() == (600, 240)
-        #assert (fig.get_size_inches() == (5, 2)).all()
-
-        p.return_value = 2
-
-        assert qt_canvas._dpi_ratio == 2
-
-        qt_canvas.draw()
-        qApp.processEvents()
-        # this second processEvents is required to fully run the draw.
-        # On `update` we notice the DPI has changed and trigger a
-        # resize event to refresh, the second processEvents is
-        # required to process that and fully update the window sizes.
-        qApp.processEvents()
-
-        # The DPI and the renderer width/height change
-        assert fig.dpi == 240
-        #assert qt_canvas.canvas.renderer.width == 1200
-        #assert qt_canvas.canvas.renderer.height == 480
-
-        # The actual widget size and figure physical size don't change
-        assert size.width() == 600
-        assert size.height() == 240
-        #assert qt_canvas.get_width_height() == (600, 240)
-        #assert (fig.get_size_inches() == (5, 2)).all()
-
-
-@pytest.mark.backend('module://mplopengl.backend_qtgl')
 def test_subplottool():
     fig, ax = plt.subplots()
     with mock.patch(
@@ -269,7 +267,6 @@ def test_subplottool():
         fig.canvas.manager.toolbar.configure_subplots()
 
 
-@pytest.mark.backend('module://mplopengl.backend_qtgl')
 def test_figureoptions():
     fig, ax = plt.subplots()
     ax.plot([1, 2])

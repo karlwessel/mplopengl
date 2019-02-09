@@ -1,15 +1,10 @@
-
 from matplotlib.testing.decorators import image_comparison
 from matplotlib.font_manager import FontProperties
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 import pytest
 
-@pytest.fixture(autouse=True)
-def test_settings():
-    mpl.rcParams['savefig.dpi'] = 80.0
+pytestmark = pytest.mark.backend('module://mplopengl.backend_qtgl')
 
-@pytest.mark.backend('module://mplopengl.backend_qtgl')
 @image_comparison(baseline_images=['mathtext_example'],
                   extensions=['png'])
 def test_mathtext_example():
@@ -103,7 +98,6 @@ def test_mathtext_example():
     for i in range(n_lines):
         s = mathext_demos[i]
 
-@pytest.mark.backend('module://mplopengl.backend_qtgl')
 @image_comparison(baseline_images=['fonts_example'],
                   extensions=['png'])
 def test_fonts_example():

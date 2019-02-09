@@ -1,14 +1,11 @@
-import matplotlib as mpl
+
 import numpy as np
 from matplotlib.testing.decorators import image_comparison
 import matplotlib.pyplot as plt
 import pytest
 
-@pytest.fixture(autouse=True)
-def test_settings():
-    mpl.rcParams['savefig.dpi'] = 80.0
+pytestmark = pytest.mark.backend('module://mplopengl.backend_qtgl')
 
-@pytest.mark.backend('module://mplopengl.backend_qtgl')
 @image_comparison(baseline_images=['basics_example'],
                   extensions=['png'])
 def test_fonts_example():
