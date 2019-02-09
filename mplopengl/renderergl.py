@@ -1,3 +1,4 @@
+from builtins import NotImplementedError
 from logging import warning
 from math import sin, radians, cos
 
@@ -30,10 +31,13 @@ class Context:
         self.kwargs = kwargs
 
     def __enter__(self):
-        self.set_context(*self.args, **self.kwargs)
+        return self.set_context(*self.args, **self.kwargs)
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.clean_context()
+
+    def set_context(self, *args, **kwargs):
+        raise NotImplementedError()
 
     def clean_context(self):
         pass
@@ -97,6 +101,7 @@ class StrokedContext(Context):
     def clean_context(self):
         glPopAttrib()
 
+
 class ClippingContext(Context):
     def set_context(self, gc):
         glPushAttrib(GL_SCISSOR_BIT)
@@ -118,6 +123,43 @@ class ClippingContext(Context):
         glPopAttrib()
 
 
+class PolygonVBOContext(Context):
+    _vbos = {}
+
+    @classmethod
+    def _buffer(cls, context, arr_data):
+        if context not in cls._vbos:
+            cls._vbos[context] = {}
+        vbos = cls._vbos[context]
+
+        key = hash(arr_data)
+        if True and key in vbos:
+            return vbos[key]
+
+        vbo = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        # arr_data = numpy.array(polygons).flatten()
+        glBufferData(GL_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(arr_data),
+                     arr_data, GL_STATIC_DRAW)
+        vbos[key] = vbo
+        return vbo
+
+    def set_context(self, context, polygons):
+        arr_data = numpy.array(polygons).tobytes()
+
+        vbo = self._buffer(context, arr_data)
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        glEnableClientState(GL_VERTEX_ARRAY)
+        glVertexPointer(2, GL_DOUBLE, 0, None)
+
+        return [len(polygon) for polygon in polygons]
+
+    def clean_context(self):
+        glDisableClientState(GL_VERTEX_ARRAY)
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+
 class RendererGL(RendererBase):
 
     def __init__(self, width, height, dpi):
@@ -126,7 +168,6 @@ class RendererGL(RendererBase):
         self.height = height
         self.dpi = dpi
         self.mathtext_parser = MathTextParser('Agg')
-        self._vbos = {}
 
     def draw_gouraud_triangle(self, gc, points, colors, transform):
         """
@@ -156,20 +197,6 @@ class RendererGL(RendererBase):
                 glVertex2fv(points[i])
             glEnd()
 
-
-    def buffer(self, arr_data):
-        key = hash(arr_data)
-        if key in self._vbos:
-            return self._vbos[key]
-
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        # arr_data = numpy.array(polygons).flatten()
-        glBufferData(GL_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(arr_data),
-                     arr_data, GL_STATIC_DRAW)
-        self._vbos[key] = vbo
-        return vbo
-
     # noinspection PyPep8Naming
     def draw_markers(self, gc, marker_path, marker_trans, path,
                      trans, rgbFace=None):
@@ -198,14 +225,9 @@ class RendererGL(RendererBase):
         marker_path = marker_trans.transform_path(marker_path)
         polygons = self.path_to_poly(marker_path)
 
-        vbo = self.buffer(numpy.array(polygons).tobytes())
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glEnableClientState(GL_VERTEX_ARRAY)
-        glVertexPointer(2, GL_DOUBLE, 0, None)
-
         positions = [vertices[-2:] for vertices, _ in path.iter_segments(trans, simplify=False)]
 
-        with ClippingContext(gc):
+        with PolygonVBOContext(self, polygons) as polygons, ClippingContext(gc):
             if rgbFace is not None:
                 with FilledContext(gc, rgbFace):
                     self.repeat_primitive(GL_POLYGON, polygons, positions)
@@ -214,19 +236,18 @@ class RendererGL(RendererBase):
                 with StrokeColorContext(gc, self), StrokedContext(gc, self):
                     self.repeat_primitive(GL_LINE_STRIP, polygons, positions)
 
-        glDisableClientState(GL_VERTEX_ARRAY)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-
     def repeat_primitive(self, primitive, polygons, positions):
         for x, y in positions:
             glPushMatrix()
             glTranslatef(x, y, 0)
-            offset = 0
-            for polygon in polygons:
-                num_vertices = len(polygon)
-                glDrawArrays(primitive, offset, num_vertices)
-                offset += num_vertices
+            self.draw_primitive(primitive, polygons)
             glPopMatrix()
+
+    def draw_primitive(self, primitive, polygons):
+        offset = 0
+        for num_vertices in polygons:
+            glDrawArrays(primitive, offset, num_vertices)
+            offset += num_vertices
 
     @staticmethod
     def path_to_poly(path):
@@ -257,42 +278,19 @@ class RendererGL(RendererBase):
 
         return polygons
 
-    def draw_polys_filled(self, polygons):
-        for polygon in polygons:
-            if len(polygon) > 2:
-                glEnableClientState(GL_VERTEX_ARRAY)
-                glVertexPointer(2, GL_DOUBLE, 0, polygon)
-                glDrawArrays(GL_POLYGON, 0, len(polygon))
-                glDisableClientState(GL_VERTEX_ARRAY)
-
-    def draw_polys_stroked(self, polygons):
-        for polygon in polygons:
-            num_vertices = len(polygon)
-            if num_vertices > 1:
-                glEnableClientState(GL_VERTEX_ARRAY)
-                glVertexPointer(2, GL_DOUBLE, 0, polygon)
-                glDrawArrays(GL_LINE_STRIP, 0, num_vertices)
-                glDisableClientState(GL_VERTEX_ARRAY)
-            else:
-                glBegin(GL_LINE_STRIP)
-                for i in range(num_vertices):
-                    glVertex2f(polygon[i][0], polygon[i][1])
-                glEnd()
-
     # noinspection PyPep8Naming
     def draw_path(self, gc, path, transform, rgbFace=None):
         path = transform.transform_path(path)
         polygons = self.path_to_poly(path)
 
-        with ClippingContext(gc):
+        with PolygonVBOContext(self, polygons) as polygons, ClippingContext(gc):
             if rgbFace is not None:
                 with FilledContext(gc, rgbFace):
-                    self.draw_polys_filled(polygons)
+                    self.draw_primitive(GL_POLYGON, polygons)
 
             if gc.get_linewidth() > 0:
                 with StrokedContext(gc, self), StrokeColorContext(gc, self):
-                    self.draw_polys_stroked(polygons)
-
+                    self.draw_primitive(GL_LINE_STRIP, polygons)
 
     # draw_path_collection is optional, and we get more correct
     # relative timings by leaving it out. backend implementers concerned with
