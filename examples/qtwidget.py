@@ -44,12 +44,16 @@ class ApplicationWindow(QtWidgets.QMainWindow):
         self._timer = dynamic_canvas.new_timer(
             100, [(self._update_canvas, (), {})])
         self._timer.start()
+        self.data = None
 
     def _update_canvas(self):
-        self._dynamic_ax.clear()
+        #self._dynamic_ax.clear()
         t = np.linspace(0, 10, 101)
         # Shift the sinusoid as a function of time.
-        self._dynamic_ax.plot(t, np.sin(t + time.time()))
+        if self.data is None:
+            self.data = self._dynamic_ax.plot(t, np.sin(t + time.time()), marker="o")[0]
+        else:
+            self.data.set_data(t, np.sin(t + time.time()))
         self._dynamic_ax.figure.canvas.draw()
 
 
