@@ -1,0 +1,4 @@
+result_images
+venv
+*.egg-info
+.idea
