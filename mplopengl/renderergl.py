@@ -1,6 +1,7 @@
 from builtins import NotImplementedError
 from logging import warning
 from math import sin, radians, cos
+from random import randrange
 
 import matplotlib
 import numpy
@@ -8,12 +9,12 @@ from OpenGL.GL import glBegin, glColor4fv, glVertex2fv, glEnd, glVertexPointer, 
     glTexImage2D, \
     glDeleteTextures, GL_TEXTURE_2D, GL_TRIANGLES, GL_QUADS, GL_SCISSOR_TEST, GL_VERTEX_ARRAY, glPushAttrib, \
     glPopAttrib, glPushMatrix, \
-    glTranslatef, glPopMatrix, glEnable, glScissor, glBlendFunc, glColor4f, glVertex2f, \
-    glLineWidth, glLineStipple, glTexParameteri, glDisable, glRotatef, glTexCoord2f, glColor3f, GL_SCISSOR_BIT, \
-    GL_BLEND, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, \
+    glTranslatef, glPopMatrix, glEnable, glScissor, glColor4f, glVertex2f, \
+    glLineWidth, glLineStipple, glTexParameteri, glDisable, glRotatef, glTexCoord2f, GL_SCISSOR_BIT, \
     glEnableClientState, glDrawArrays, GL_POLYGON, glDisableClientState, GL_LINE_BIT, GL_LINE_STRIP, glBindTexture, \
-    GL_RGBA, GL_COLOR_MATERIAL, GL_TEXTURE_BASE_LEVEL, GL_TEXTURE_MAX_LEVEL, GL_DOUBLE, GL_UNSIGNED_BYTE, \
-    glBindBuffer, GL_ARRAY_BUFFER, ArrayDatatype, glBufferData, GL_STATIC_DRAW, glGenBuffers
+    GL_RGBA, GL_TEXTURE_BASE_LEVEL, GL_TEXTURE_MAX_LEVEL, GL_DOUBLE, GL_UNSIGNED_BYTE, \
+    glBindBuffer, GL_ARRAY_BUFFER, ArrayDatatype, glBufferData, GL_STATIC_DRAW, glGenBuffers, \
+    GL_TEXTURE_MAG_FILTER, GL_NEAREST
 from matplotlib import rcParams
 from matplotlib.backend_bases import RendererBase
 from matplotlib.backends import backend_agg
@@ -123,41 +124,196 @@ class ClippingContext(Context):
         glPopAttrib()
 
 
-class PolygonVBOContext(Context):
-    _vbos = {}
+class PolygonVBO:
+    def __init__(self, polygons, arr_data=None):
+        if arr_data is None:
+            arr_data = numpy.array(polygons).tobytes()
 
-    @classmethod
-    def _buffer(cls, context, arr_data):
-        if context not in cls._vbos:
-            cls._vbos[context] = {}
-        vbos = cls._vbos[context]
-
-        key = hash(arr_data)
-        if True and key in vbos:
-            return vbos[key]
-
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        self.vbo = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
         # arr_data = numpy.array(polygons).flatten()
         glBufferData(GL_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(arr_data),
                      arr_data, GL_STATIC_DRAW)
-        vbos[key] = vbo
-        return vbo
 
-    def set_context(self, context, polygons):
-        arr_data = numpy.array(polygons).tobytes()
+        self._poly_lens = [len(polygon) for polygon in polygons]
 
-        vbo = self._buffer(context, arr_data)
-
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glEnableClientState(GL_VERTEX_ARRAY)
+    def bind(self):
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
         glVertexPointer(2, GL_DOUBLE, 0, None)
 
-        return [len(polygon) for polygon in polygons]
+    def poly_sizes(self):
+        return self._poly_lens
+
+
+class PolygonVBOContext(Context):
+    def set_context(self, vbo):
+        glEnableClientState(GL_VERTEX_ARRAY)
+        vbo.bind()
+
+        return vbo.poly_sizes()
 
     def clean_context(self):
         glDisableClientState(GL_VERTEX_ARRAY)
         glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+
+class Texture:
+    def __init__(self, im, cached=False):
+        texture_id = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, texture_id)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+
+        # if no interpolation is chosen we shouldn't "invent" datapoints by interpolation
+        # when magnifying
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, im.shape[1], im.shape[0],
+                     0, GL_RGBA, GL_UNSIGNED_BYTE, im)
+        glBindTexture(GL_TEXTURE_2D, 0)
+
+        self.tex_id = texture_id
+        self.size = numpy.array([im.shape[1], im.shape[0]])
+        self._cached = cached
+
+    def draw_at(self, x, y, angle=0, transform=None, col=None):
+        if col is None:
+            col = [1, 1, 1]
+
+        if transform is None:
+            x0 = [0, 0]
+            x1 = self.size
+        else:
+            x0 = transform.transform([0, 0])
+            x1 = transform.transform([1, 1])
+
+        glPushMatrix()
+        glTranslatef(x, y, 0)
+        glRotatef(angle, 0, 0, 1)
+
+        glColor3fv(col)
+        glBegin(GL_QUADS)
+        glTexCoord2f(1, 0)
+        glVertex2f(x1[0], x0[1])
+        glTexCoord2f(1, 1)
+        glVertex2f(x1[0], x1[1])
+        glTexCoord2f(0, 1)
+        glVertex2f(x0[0], x1[1])
+        glTexCoord2f(0, 0)
+        glVertex2f(x0[0], x0[1])
+
+        glEnd()
+
+        glPopMatrix()
+
+
+class TextureContext(Context):
+    def set_context(self, texture, keep=False):
+        self.tex_id = texture.tex_id
+        self._keep = keep
+        glBindTexture(GL_TEXTURE_2D, self.tex_id)
+        glEnable(GL_TEXTURE_2D)
+
+    def clean_context(self):
+        glBindTexture(GL_TEXTURE_2D, 0)
+        glDisable(GL_TEXTURE_2D)
+        if not self._keep:
+            glDeleteTextures([self.tex_id])
+
+
+class TextTexture(Texture):
+    mathtext_parser = MathTextParser('Agg')
+
+    @staticmethod
+    def _text_image(text, prop, dpi):
+        font = TextTexture._get_agg_font(prop, dpi)
+
+        flags = backend_agg.get_hinting_flag()
+        if len(text) == 1 and ord(text) > 127:
+            font.load_char(ord(text), flags=flags)
+        else:
+            # We pass '0' for angle here, since it will be rotated (in raster
+            # space) in the following call to draw_text_image).
+            font.set_text(text, 0, flags=flags)
+        font.draw_glyphs_to_bitmap(antialiased=rcParams['text.antialiased'])
+        d = font.get_descent() / 64.0
+        # The descent needs to be adjusted for the angle.
+        xo, yo = font.get_bitmap_offset()
+        xo /= 64.0
+        yo /= 64.0
+
+        return font.get_image(), xo, yo + 1, d
+
+    @staticmethod
+    def _math_tex_image(text, prop, dpi):
+        ox, oy, width, height, descent, font_image, used_characters = \
+            TextTexture.mathtext_parser.parse(text, dpi, prop)
+        return font_image.as_array(), ox, -oy + 1, descent
+
+    @staticmethod
+    def _get_agg_font(prop, dpi):
+        """
+        Get the font for text instance t, caching for efficiency
+        """
+        fname = findfont(prop)
+        font = get_font(fname)
+
+        font.clear()
+        size = prop.get_size_in_points()
+        font.set_size(size, dpi)
+
+        return font
+
+    def __init__(self, text, prop, ismath, dpi):
+        if ismath:
+            image, ox, oy, descent = self._math_tex_image(text, prop, dpi)
+        else:
+            image, ox, oy, descent = self._text_image(text, prop, dpi)
+
+        im = numpy.ones((*image.shape, 4), dtype=numpy.uint8) * 255
+        im[::-1, :, 3] = image
+
+        self.offset = numpy.array([ox, -oy])
+        self.descent = descent
+
+        super().__init__(im)
+
+    def draw_at(self, x, y, angle, **kwargs):
+        angle_off = self.descent * numpy.array([sin(radians(angle)), -cos(radians(angle))])
+        pos = numpy.round(numpy.array([x, y]) + self.offset + angle_off)
+        super().draw_at(*pos, angle=angle, **kwargs)
+
+
+class TextTextureContext(Context):
+
+    def set_context(self, image):
+        glBindTexture(GL_TEXTURE_2D, image.tex_id)
+        glEnable(GL_TEXTURE_2D)
+
+    def clean_context(self):
+        glDisable(GL_TEXTURE_2D)
+        glBindTexture(GL_TEXTURE_2D, 0)
+
+
+class GPUObjectCache:
+    def __init__(self):
+        self._cache = {}
+
+    def fetch(self, context, hash_value, factory, *args, **kwargs):
+        if context not in self._cache:
+            self._cache[context] = {}
+        cache = self._cache[context]
+
+        if hash_value in cache:
+            return cache[hash_value]
+
+        obj = factory(*args, **kwargs)
+        cache[hash_value] = obj
+
+        return obj
+
+    def __call__(self, context, hash_value, factory, *args, **kwargs):
+        return self.fetch(context, hash_value, factory, *args, **kwargs)
 
 
 class RendererGL(RendererBase):
@@ -167,7 +323,8 @@ class RendererGL(RendererBase):
         self.width = width
         self.height = height
         self.dpi = dpi
-        self.mathtext_parser = MathTextParser('Agg')
+        self.context = randrange(9999999999)
+        self._gpu_cache = GPUObjectCache()
 
     def draw_gouraud_triangle(self, gc, points, colors, transform):
         """
@@ -227,7 +384,9 @@ class RendererGL(RendererBase):
 
         positions = [vertices[-2:] for vertices, _ in path.iter_segments(trans, simplify=False)]
 
-        with PolygonVBOContext(self, polygons) as polygons, ClippingContext(gc):
+        arr_data = numpy.array(polygons).tobytes()
+        poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
+        with PolygonVBOContext(poly_vbo) as polygons, ClippingContext(gc):
             if rgbFace is not None:
                 with FilledContext(gc, rgbFace):
                     self.repeat_primitive(GL_POLYGON, polygons, positions)
@@ -283,7 +442,9 @@ class RendererGL(RendererBase):
         path = transform.transform_path(path)
         polygons = self.path_to_poly(path)
 
-        with PolygonVBOContext(self, polygons) as polygons, ClippingContext(gc):
+        arr_data = numpy.array(polygons).tobytes()
+        poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
+        with PolygonVBOContext(poly_vbo) as polygons, ClippingContext(gc):
             if rgbFace is not None:
                 with FilledContext(gc, rgbFace):
                     self.draw_primitive(GL_POLYGON, polygons)
@@ -314,51 +475,15 @@ class RendererGL(RendererBase):
     def option_scale_image(self):
         return True
 
-    def _get_agg_font(self, prop):
-        """
-        Get the font for text instance t, caching for efficiency
-        """
-        fname = findfont(prop)
-        font = get_font(fname)
-
-        font.clear()
-        size = prop.get_size_in_points()
-        font.set_size(size, self.dpi)
-
-        return font
-
-    def draw_text_f2font(self, gc, x, y, s, prop, angle):
-
-        flags = backend_agg.get_hinting_flag()
-        font = self._get_agg_font(prop)
-
-        if font is None:
-            return None
-        if len(s) == 1 and ord(s) > 127:
-            font.load_char(ord(s), flags=flags)
-        else:
-            # We pass '0' for angle here, since it will be rotated (in raster
-            # space) in the following call to draw_text_image).
-            font.set_text(s, 0, flags=flags)
-        font.draw_glyphs_to_bitmap(antialiased=rcParams['text.antialiased'])
-        d = font.get_descent() / 64.0
-        # The descent needs to be adjusted for the angle.
-        xo, yo = font.get_bitmap_offset()
-        xo /= 64.0
-        yo /= 64.0
-        xd = -d * sin(radians(angle))
-        yd = d * cos(radians(angle))
-        self.draw_text_image(
-            font.get_image(), numpy.round(x - xd + xo), numpy.round(y + yd + yo) + 1, angle, gc)
-
     def bind_image(self, im):
         texture_id = glGenTextures(1)
-        # glPixelStorei(GL_UNPACK_ALIGNMENT, 4)
+        # gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4)
         glBindTexture(GL_TEXTURE_2D, texture_id)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, im.shape[1], im.shape[0],
-                     0, GL_RGBA, GL_UNSIGNED_BYTE, im)
+                     0, GL_RGBA, GL_UNSIGNED_BYTE, im.tobytes())
         glEnable(GL_TEXTURE_2D)
         return texture_id
 
@@ -366,83 +491,17 @@ class RendererGL(RendererBase):
         glDisable(GL_TEXTURE_2D)
         glDeleteTextures([texture_id])
 
-    def draw_text_image(self, im_raw, x, y, angle, gc):
-        if isinstance(im_raw, matplotlib.ft2font.FT2Image):
-            im_raw = im_raw.as_array()
-        im = numpy.ones((*im_raw.shape, 4), dtype=numpy.uint8) * 255
-        im[:, :, 3] = im_raw
-        texture_id = self.bind_image(im)
-        x0 = [0, 0]
-        x1 = im.shape[1], im.shape[0]
-        col = gc.get_rgb()[:3]
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        glEnable(GL_COLOR_MATERIAL)
-
-        y = self.height - y
-        glTranslatef(x, y, 0)
-        glRotatef(angle, 0, 0, 1)
-        glColor3fv(col)
-        glBegin(GL_QUADS)
-        glVertex2f(x0[0], x0[1])
-        glTexCoord2f(1, 1)
-        glVertex2f(x1[0], x0[1])
-        glTexCoord2f(1, 0)
-        glVertex2f(x1[0], x1[1])
-        glTexCoord2f(0, 0)
-        glVertex2f(x0[0], x1[1])
-        glTexCoord2f(0, 1)
-        glEnd()
-
-        self.unbind_image(texture_id)
-        glRotatef(-angle, 0, 0, 1)
-        glTranslatef(-x, -y, 0)
-
     def draw_image(self, gc, x, y, im, transform=None):
-        texture_id = self.bind_image(im)
-
-        if transform is None:
-            x0 = [0, 0]
-            x1 = [1, 1]
-            print(x, y)
-            print(im)
-        else:
-            x0 = transform.transform([0, 0])
-            x1 = transform.transform([1, 1])
-        glTranslatef(x, y, 0)
-        glColor3f(1, 1, 1)
-        glBegin(GL_QUADS)
-        glVertex2f(x0[0], x0[1])
-        glTexCoord2f(1, 0)
-        glVertex2f(x1[0], x0[1])
-        glTexCoord2f(1, 1)
-        glVertex2f(x1[0], x1[1])
-        glTexCoord2f(0, 1)
-        glVertex2f(x0[0], x1[1])
-        glTexCoord2f(0, 0)
-        glEnd()
-
-        self.unbind_image(texture_id)
-        glTranslatef(-x, -y, 0)
-
-    def draw_mathtext_f2font(self, gc, x, y, s, prop, angle):
-        """
-        Draw the math text using matplotlib.mathtext
-        """
-        ox, oy, width, height, descent, font_image, used_characters = \
-            self.mathtext_parser.parse(s, self.dpi, prop)
-
-        xd = descent * sin(radians(angle))
-        yd = descent * cos(radians(angle))
-        x = numpy.round(x + ox + xd)
-        y = numpy.round(y - oy + yd)
-        self.draw_text_image(font_image, x, y + 1, angle, gc)
+        tex = self._gpu_cache.fetch(self.context, hash(im.tobytes()),
+                                    Texture, im)
+        with TextureContext(tex, keep=True), ClippingContext(gc):
+            tex.draw_at(x, y, transform=transform)
 
     def draw_text(self, gc, x, y, s, prop, angle, ismath=False, mtext=None):
-        if ismath:
-            return self.draw_mathtext_f2font(gc, x, y, s, prop, angle)
-
-        return self.draw_text_f2font(gc, x, y, s, prop, angle)
+        text_image = self._gpu_cache(self.context, hash((s, prop, ismath, self.dpi)),
+                                     TextTexture, s, prop, ismath, self.dpi)
+        with TextTextureContext(text_image):
+            text_image.draw_at(x, self.height - y, angle=angle, col=gc.get_rgb()[:3])
 
     def flipy(self):
         """
