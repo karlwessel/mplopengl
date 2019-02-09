@@ -16,8 +16,10 @@ assert is_pyqt5()
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 # ... but qtgl's FigureCanvas
 from mplopengl.backend_qtgl import FigureCanvas
+#from matplotlib.backends.backend_qt5agg import FigureCanvas
 
 from matplotlib.figure import Figure
+import matplotlib.cm as cm
 
 
 class ApplicationWindow(QtWidgets.QMainWindow):
@@ -37,7 +39,19 @@ class ApplicationWindow(QtWidgets.QMainWindow):
                         NavigationToolbar(dynamic_canvas, self))
 
         self._static_ax = static_canvas.figure.subplots()
+        delta = 0.025
+        x = y = np.arange(-3.0, 3.0, delta)
+        X, Y = np.meshgrid(x, y)
+        Z1 = np.exp(-X ** 2 - Y ** 2)
+        Z2 = np.exp(-(X - 1) ** 2 - (Y - 1) ** 2)
+        Z = (Z1 - Z2) * 2
+        print(Z.shape)
+        im = self._static_ax.imshow(Z, interpolation="None", cmap=cm.RdYlGn,
+                                    origin='lower', extent=[0, 10, -100, 100],
+                                    vmax=abs(Z).max(), vmin=-abs(Z).max(),
+                                    aspect='auto')
         t = np.linspace(0, 10, 501)
+
         self._static_ax.plot(t, np.tan(t), ".")
 
         self._dynamic_ax = dynamic_canvas.figure.subplots()
