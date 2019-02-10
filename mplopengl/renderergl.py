@@ -3,16 +3,7 @@ from random import randrange
 
 import matplotlib
 import numpy
-from OpenGL.GL import glBegin, glColor4fv, glVertex2fv, glEnd, glVertexPointer, glColor3fv, glGenTextures, \
-    glTexImage2D, \
-    glDeleteTextures, GL_TEXTURE_2D, GL_TRIANGLES, GL_QUADS, GL_SCISSOR_TEST, GL_VERTEX_ARRAY, glPushAttrib, \
-    glPopAttrib, glPushMatrix, \
-    glTranslatef, glPopMatrix, glEnable, glScissor, glColor4f, glVertex2f, \
-    glLineWidth, glLineStipple, glTexParameteri, glDisable, glRotatef, glTexCoord2f, GL_SCISSOR_BIT, \
-    glEnableClientState, glDrawArrays, GL_POLYGON, glDisableClientState, GL_LINE_BIT, GL_LINE_STRIP, glBindTexture, \
-    GL_RGBA, GL_TEXTURE_BASE_LEVEL, GL_TEXTURE_MAX_LEVEL, GL_UNSIGNED_BYTE, \
-    glBindBuffer, GL_ARRAY_BUFFER, ArrayDatatype, glBufferData, GL_STATIC_DRAW, glGenBuffers, \
-    GL_TEXTURE_MAG_FILTER, GL_NEAREST, GL_FLOAT
+from OpenGL.GL import *
 from builtins import NotImplementedError
 from math import sin, radians, cos
 from matplotlib import rcParams
@@ -44,36 +35,41 @@ class Context:
         pass
 
 
+def get_fill_color(gc, rgb_face):
+    if gc.get_forced_alpha():
+        fillopacity = gc.get_alpha()
+    else:
+        fillopacity = rgb_face[3] if len(rgb_face) > 3 else 1.0
+
+    return [*rgb_face[:3], fillopacity]
+
+
 class FilledContext(Context):
     def set_context(self, gc, rgb_face):
-        if gc.get_forced_alpha():
-            fillopacity = gc.get_alpha()
-        else:
-            fillopacity = rgb_face[3] if len(rgb_face) > 3 else 1.0
+        glColor4fv(get_fill_color(gc, rgb_face))
 
-        glColor4f(*rgb_face[:3], fillopacity)
+
+def get_stroke_color(gc, renderer):
+    width = renderer.points_to_pixels(gc.get_linewidth())
+
+    if gc.get_forced_alpha():
+        strokeopacity = gc.get_alpha()
+    else:
+        strokeopacity = gc.get_rgb()[3]
+
+    col = gc.get_rgb()[:3]
+    # minimum line width is 1.5 for compatibilty with old and/or intel hardware
+    # thinner lines get alpha faded
+
+    if width < MIN_LINE_WIDTH:
+        strokeopacity *= width / MIN_LINE_WIDTH
+
+    return [*col, strokeopacity]
 
 
 class StrokeColorContext(Context):
     def set_context(self, gc, renderer):
-        width = renderer.points_to_pixels(gc.get_linewidth())
-
-        if gc.get_forced_alpha():
-            strokeopacity = gc.get_alpha()
-        else:
-            strokeopacity = gc.get_rgb()[3]
-
-        col = gc.get_rgb()[:3]
-        # minimum line width is 1.5 for compatibilty with old and/or intel hardware
-        # thinner lines get alpha faded
-
-        if width < MIN_LINE_WIDTH:
-            glColor4f(*col, strokeopacity * width / MIN_LINE_WIDTH)
-        else:
-            if strokeopacity < 1:
-                glColor4f(*col, strokeopacity)
-            else:
-                glColor3fv(col)
+        glColor4fv(get_stroke_color(gc, renderer))
 
 
 class StrokedContext(Context):
@@ -124,10 +120,10 @@ class ClippingContext(Context):
         glPopAttrib()
 
 
-class PolygonVBO:
-    def __init__(self, polygons, arr_data=None):
-        if arr_data is None:
-            arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
+class VBO:
+    def __init__(self, arr_data):
+        if not isinstance(arr_data, bytes):
+            arr_data = numpy.array(arr_data).astype(numpy.float32).tobytes()
 
         self.vbo = glGenBuffers(1)
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
@@ -135,11 +131,23 @@ class PolygonVBO:
         glBufferData(GL_ARRAY_BUFFER, ArrayDatatype.arrayByteCount(arr_data),
                      arr_data, GL_STATIC_DRAW)
 
-        self._poly_lens = [len(polygon) for polygon in polygons]
-
-    def bind(self):
+    def bind_to(self, location=None):
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
-        glVertexPointer(2, GL_FLOAT, 0, None)
+        if location is None:
+            glVertexPointer(2, GL_FLOAT, 0, None)
+        else:
+            glVertexAttribPointer(location, 2, GL_FLOAT, GL_FALSE, 0, None)
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+
+class PolygonVBO(VBO):
+    def __init__(self, polygons, arr_data=None):
+        if arr_data is None:
+            super().__init__(polygons)
+        else:
+            super().__init__(arr_data)
+
+        self._poly_lens = [len(polygon) for polygon in polygons]
 
     def poly_sizes(self):
         return self._poly_lens
@@ -148,7 +156,7 @@ class PolygonVBO:
 class PolygonVBOContext(Context):
     def set_context(self, vbo):
         glEnableClientState(GL_VERTEX_ARRAY)
-        vbo.bind()
+        vbo.bind_to()
 
         return vbo.poly_sizes()
 
@@ -316,6 +324,87 @@ class GPUObjectCache:
         return self.fetch(context, hash_value, factory, *args, **kwargs)
 
 
+vertexShaderSource = """#version 120
+attribute vec2 pos;
+attribute vec2 shift;
+void main()
+{    
+    gl_Position = gl_ModelViewProjectionMatrix * vec4(pos+shift, 0.0, 1.0);
+}"""
+
+fragmentShaderSource = """#version 120
+uniform vec4 color;
+void main()
+{
+    gl_FragColor = color;
+}"""
+
+
+def create_shader(shader_type, source):
+    """compile a shader."""
+    shader = glCreateShader(shader_type)
+    glShaderSource(shader, source)
+    glCompileShader(shader)
+    if glGetShaderiv(shader, GL_COMPILE_STATUS) != GL_TRUE:
+        raise RuntimeError(glGetShaderInfoLog(shader))
+    return shader
+
+
+class Shader:
+    def __init__(self, vertex_source, fragment_source, attrs, uniforms):
+        vert_shader = create_shader(GL_VERTEX_SHADER, vertex_source)
+        frag_shader = create_shader(GL_FRAGMENT_SHADER, fragment_source)
+
+        program = glCreateProgram()
+        glAttachShader(program, vert_shader)
+        glAttachShader(program, frag_shader)
+
+        for attr, loc in attrs.items():
+            glBindAttribLocation(program, loc, attr)
+
+        glLinkProgram(program)
+        if glGetProgramiv(program, GL_LINK_STATUS) != GL_TRUE:
+            raise RuntimeError(glGetProgramInfoLog(program))
+
+        self.uniforms = {}
+        for uniform in uniforms:
+            self.uniforms[uniform] = glGetUniformLocation(program, uniform)
+
+        self.program = program
+        self.attrs = attrs
+
+    def bind(self):
+        glUseProgram(self.program)
+        for attr in self.attrs.values():
+            glEnableVertexAttribArray(attr)
+
+    def unbind(self):
+        for attr in self.attrs.values():
+            glDisableVertexAttribArray(attr)
+        glUseProgram(0)
+
+    def set_uniform4f(self, uniform, *args):
+        loc = self.uniforms[uniform]
+        glUniform4f(loc, *args)
+
+    def set_attr_divisor(self, attr, div):
+        glVertexAttribDivisor(self.attrs[attr], div)
+
+    def bind_attr_vbo(self, attr, vbo):
+        loc = self.attrs[attr]
+        vbo.bind_to(loc)
+
+
+class ObjectContext(Context):
+    def set_context(self, obj, *args, **kwargs):
+        self.obj = obj
+        obj.bind(*args, **kwargs)
+        return obj
+
+    def clean_context(self):
+        self.obj.unbind()
+
+
 class RendererGL(RendererBase):
 
     def __init__(self, width, height, dpi):
@@ -325,6 +414,10 @@ class RendererGL(RendererBase):
         self.dpi = dpi
         self.context = randrange(9999999999)
         self._gpu_cache = GPUObjectCache()
+
+        self.particle_shader = Shader(vertexShaderSource, fragmentShaderSource,
+                                      {"pos": 0, "shift": 4},
+                                      ["color"])
 
     def draw_gouraud_triangle(self, gc, points, colors, transform):
         """
@@ -377,23 +470,33 @@ class RendererGL(RendererBase):
         want to override this method in order to draw the marker only
         once and reuse it multiple times.
         """
-        # disp_list = self.marker_list(gc, marker_path, marker_trans, rgbFace)
-
         marker_path = marker_trans.transform_path(marker_path)
         polygons = self.path_to_poly(marker_path)
 
         positions = [vertices[-2:] for vertices, _ in path.iter_segments(trans, simplify=False)]
+        arr_data = numpy.array(positions).astype(numpy.float32).tobytes()
+        pos_vbo = self._gpu_cache(self.context, hash(arr_data), VBO, arr_data)
 
-        arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
-        poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
-        with PolygonVBOContext(poly_vbo) as polygons, ClippingContext(gc):
-            if rgbFace is not None:
-                with FilledContext(gc, rgbFace):
-                    self.repeat_primitive(GL_POLYGON, polygons, positions)
+        with ObjectContext(self.particle_shader) as program, ClippingContext(gc):
+            program.bind_attr_vbo("shift", pos_vbo)
+            program.set_attr_divisor("pos", 0)
+            program.set_attr_divisor("shift", 1)
 
-            if gc.get_linewidth() > 0:
-                with StrokeColorContext(gc, self), StrokedContext(gc, self):
-                    self.repeat_primitive(GL_LINE_STRIP, polygons, positions)
+            for polygon in polygons:
+                arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
+                poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
+                program.bind_attr_vbo("pos", poly_vbo)
+
+                if rgbFace is not None:
+                    col = get_fill_color(gc, rgbFace)
+                    program.set_uniform4f("color", *col)
+                    glDrawArraysInstanced(GL_POLYGON, 0, len(polygon), len(positions))
+
+                if gc.get_linewidth() > 0:
+                    with StrokedContext(gc, self):
+                        col = get_stroke_color(gc, self)
+                        program.set_uniform4f("color", *col)
+                        glDrawArraysInstanced(GL_LINE_STRIP, 0, len(polygon), len(positions))
 
     def repeat_primitive(self, primitive, polygons, positions):
         for x, y in positions:
