@@ -2,11 +2,12 @@ import copy
 from unittest import mock
 
 import matplotlib
+import pytest
 from matplotlib import pyplot as plt
 from matplotlib._pylab_helpers import Gcf
 
-import pytest
 pytestmark = pytest.mark.backend('module://mplopengl.backend_qtgl')
+
 
 @pytest.fixture(autouse=True)
 def mpl_test_settings(qt_module, mpl_test_settings):

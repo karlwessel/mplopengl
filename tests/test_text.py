@@ -1,9 +1,14 @@
-from matplotlib.testing.decorators import image_comparison
-from matplotlib.font_manager import FontProperties
+"""
+@author: Karl Royen
+"""
+
 import matplotlib.pyplot as plt
 import pytest
+from matplotlib.font_manager import FontProperties
+from matplotlib.testing.decorators import image_comparison
 
 pytestmark = pytest.mark.backend('module://mplopengl.backend_qtgl')
+
 
 @image_comparison(baseline_images=['mathtext_example'],
                   extensions=['png'])
@@ -98,10 +103,10 @@ def test_mathtext_example():
     for i in range(n_lines):
         s = mathext_demos[i]
 
+
 @image_comparison(baseline_images=['fonts_example'],
                   extensions=['png'])
 def test_fonts_example():
-
     plt.subplot(111, facecolor='w')
 
     font0 = FontProperties()

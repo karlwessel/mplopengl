@@ -1,11 +1,17 @@
-import numpy as np
-from matplotlib.testing.decorators import image_comparison
+"""
+@author: Karl Royen
+"""
+
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-from six import iteritems
+import numpy as np
 import pytest
+from matplotlib.lines import Line2D
+from matplotlib.testing.decorators import image_comparison
+from six import iteritems
 
 pytestmark = pytest.mark.backend('module://mplopengl.backend_qtgl')
+
+
 @image_comparison(baseline_images=['marker_example_filled'],
                   extensions=['png'])
 def test_marker_filled_example():
@@ -14,15 +20,12 @@ def test_marker_filled_example():
                       fontsize=12, fontdict={'family': 'monospace'})
     marker_style = dict(linestyle='None', color='cornflowerblue', markersize=10)
 
-
     def format_axes(ax):
         ax.margins(0.2)
         ax.set_axis_off()
 
-
     def nice_repr(text):
         return repr(text).lstrip('u')
-
 
     def split_list(a_list):
         i_half = len(a_list) // 2
@@ -48,20 +51,16 @@ def test_marker_unfilled_example():
                       fontsize=12, fontdict={'family': 'monospace'})
     marker_style = dict(linestyle='None', color='cornflowerblue', markersize=10)
 
-
     def format_axes(ax):
         ax.margins(0.2)
         ax.set_axis_off()
 
-
     def nice_repr(text):
         return repr(text).lstrip('u')
-
 
     def split_list(a_list):
         i_half = len(a_list) // 2
         return (a_list[:i_half], a_list[i_half:])
-
 
     # Plot all un-filled markers
     # --------------------------
@@ -83,15 +82,3 @@ def test_marker_unfilled_example():
             ax.plot(y * points, marker=marker, **marker_style)
             format_axes(ax)
     fig.suptitle('un-filled markers', fontsize=14)
-    return
-
-    # Plot all filled markers.
-    # ------------------------
-
-    fig, axes = plt.subplots(ncols=2)
-    for ax, markers in zip(axes, split_list(Line2D.filled_markers)):
-        for y, marker in enumerate(markers):
-            ax.text(-0.5, y, nice_repr(marker), **text_style)
-            ax.plot(y * points, marker=marker, **marker_style)
-            format_axes(ax)
-    fig.suptitle('filled markers', fontsize=14)

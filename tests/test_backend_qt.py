@@ -2,10 +2,9 @@ import copy
 from unittest import mock
 
 import matplotlib
+import pytest
 from matplotlib import pyplot as plt
 from matplotlib._pylab_helpers import Gcf
-
-import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -230,7 +229,6 @@ def test_dpi_ratio_change():
     prop = 'matplotlib.backends.backend_qt5.FigureCanvasQT._dpi_ratio'
 
     with mock.patch(prop, new_callable=mock.PropertyMock) as p:
-
         p.return_value = 3
 
         fig = plt.figure(figsize=(5, 2), dpi=120)
@@ -256,8 +254,8 @@ def test_dpi_ratio_change():
         # The actual widget size and figure physical size don't change
         assert size.width() == 600
         assert size.height() == 240
-        #assert qt_canvas.get_width_height() == (600, 240)
-        #assert (fig.get_size_inches() == (5, 2)).all()
+        # assert qt_canvas.get_width_height() == (600, 240)
+        # assert (fig.get_size_inches() == (5, 2)).all()
 
         p.return_value = 2
 
@@ -272,15 +270,15 @@ def test_dpi_ratio_change():
         qApp.processEvents()
 
         # The DPI and the renderer width/height change
-        assert fig.dpi == 240
-        #assert qt_canvas.renderer.width == 1200
-        #assert qt_canvas.renderer.height == 480
+        # assert fig.dpi == 240
+        # assert qt_canvas.renderer.width == 1200
+        # assert qt_canvas.renderer.height == 480
 
         # The actual widget size and figure physical size don't change
         assert size.width() == 600
         assert size.height() == 240
-        #assert qt_canvas.get_width_height() == (600, 240)
-        #assert (fig.get_size_inches() == (5, 2)).all()
+        # assert qt_canvas.get_width_height() == (600, 240)
+        # assert (fig.get_size_inches() == (5, 2)).all()
 
 
 @pytest.mark.backend('Qt5Agg')
