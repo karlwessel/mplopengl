@@ -1,6 +1,4 @@
-from builtins import NotImplementedError
 from logging import warning
-from math import sin, radians, cos
 from random import randrange
 
 import matplotlib
@@ -12,9 +10,11 @@ from OpenGL.GL import glBegin, glColor4fv, glVertex2fv, glEnd, glVertexPointer, 
     glTranslatef, glPopMatrix, glEnable, glScissor, glColor4f, glVertex2f, \
     glLineWidth, glLineStipple, glTexParameteri, glDisable, glRotatef, glTexCoord2f, GL_SCISSOR_BIT, \
     glEnableClientState, glDrawArrays, GL_POLYGON, glDisableClientState, GL_LINE_BIT, GL_LINE_STRIP, glBindTexture, \
-    GL_RGBA, GL_TEXTURE_BASE_LEVEL, GL_TEXTURE_MAX_LEVEL, GL_DOUBLE, GL_UNSIGNED_BYTE, \
+    GL_RGBA, GL_TEXTURE_BASE_LEVEL, GL_TEXTURE_MAX_LEVEL, GL_UNSIGNED_BYTE, \
     glBindBuffer, GL_ARRAY_BUFFER, ArrayDatatype, glBufferData, GL_STATIC_DRAW, glGenBuffers, \
-    GL_TEXTURE_MAG_FILTER, GL_NEAREST
+    GL_TEXTURE_MAG_FILTER, GL_NEAREST, GL_FLOAT
+from builtins import NotImplementedError
+from math import sin, radians, cos
 from matplotlib import rcParams
 from matplotlib.backend_bases import RendererBase
 from matplotlib.backends import backend_agg
@@ -127,7 +127,7 @@ class ClippingContext(Context):
 class PolygonVBO:
     def __init__(self, polygons, arr_data=None):
         if arr_data is None:
-            arr_data = numpy.array(polygons).tobytes()
+            arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
 
         self.vbo = glGenBuffers(1)
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
@@ -139,7 +139,7 @@ class PolygonVBO:
 
     def bind(self):
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
-        glVertexPointer(2, GL_DOUBLE, 0, None)
+        glVertexPointer(2, GL_FLOAT, 0, None)
 
     def poly_sizes(self):
         return self._poly_lens
@@ -384,7 +384,7 @@ class RendererGL(RendererBase):
 
         positions = [vertices[-2:] for vertices, _ in path.iter_segments(trans, simplify=False)]
 
-        arr_data = numpy.array(polygons).tobytes()
+        arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
         poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
         with PolygonVBOContext(poly_vbo) as polygons, ClippingContext(gc):
             if rgbFace is not None:
@@ -442,7 +442,7 @@ class RendererGL(RendererBase):
         path = transform.transform_path(path)
         polygons = self.path_to_poly(path)
 
-        arr_data = numpy.array(polygons).tobytes()
+        arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
         poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
         with PolygonVBOContext(poly_vbo) as polygons, ClippingContext(gc):
             if rgbFace is not None:
