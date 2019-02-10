@@ -483,8 +483,8 @@ class RendererGL(RendererBase):
             program.set_attr_divisor("shift", 1)
 
             for polygon in polygons:
-                arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
-                poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
+                arr_data = numpy.array(polygon).astype(numpy.float32).tobytes()
+                poly_vbo = self._gpu_cache(self.context, hash(arr_data), VBO, arr_data)
                 program.bind_attr_vbo("pos", poly_vbo)
 
                 if rgbFace is not None:
