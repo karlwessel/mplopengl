@@ -1,3 +1,7 @@
+"""
+@author: Karl Royen
+"""
+
 from logging import warning
 from random import randrange
 
