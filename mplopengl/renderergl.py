@@ -1,15 +1,14 @@
 """
 @author: Karl Royen
 """
-
-from logging import warning
+from builtins import NotImplementedError
+from functools import lru_cache
+from math import sin, radians, cos, log2
 from random import randrange
 
 import matplotlib
 import numpy
 from OpenGL.GL import *
-from builtins import NotImplementedError
-from math import sin, radians, cos
 from matplotlib import rcParams
 from matplotlib.backend_bases import RendererBase
 from matplotlib.backends import backend_agg
@@ -76,6 +75,59 @@ class StrokeColorContext(Context):
         glColor4fv(get_stroke_color(gc, renderer))
 
 
+def linestipple_from_style(offset, dashes):
+    if dashes is None:
+        return 1, int('1111111111111111', 2)
+
+    return _cached_linestipple_from_style(offset, tuple(dashes))
+
+
+@lru_cache(10)
+def _cached_linestipple_from_style(offset, dashes):
+    """
+    Create a line stipple pattern from matplotlibs offset dash list.
+
+    This probably could be done much better/simple, but for now it gets
+    the job done.
+    """
+    # print("Input: ", offset, dashes)
+    length = numpy.sum(dashes)
+    # rescale to length of multiple of 2 but maximum of length 16
+    order = int(numpy.ceil(log2(length)))
+    if order > 4:
+        fac = 2 ** (order - 4)
+        order = 4
+    else:
+        fac = 1
+
+    length2 = 2 ** order
+    style = numpy.multiply(dashes, length2 / length)
+    offset *= length2 / length
+
+    # transform to pixel units
+    pix_style = numpy.zeros(len(style), dtype=numpy.int)
+    for i in range(len(style)):
+        pix_sum = sum(pix_style[:i])
+        style_sum = sum(style[:i + 1])
+        pix_style[i] = numpy.round(style_sum) - pix_sum
+    pix_offset = int(round(offset))
+    # print(style, pix_style)
+
+    # create pattern
+    pattern = []
+    val = 1
+    while len(pattern) < 16:
+        for l in pix_style:
+            pattern.extend([str(val % 2)] * l)
+            val += 1
+
+    # apply offset to pattern
+    numpy.roll(pattern, -pix_offset)
+    pattern = ''.join(pattern)
+    # print(pattern)
+    return fac, int(pattern, 2)
+
+
 class StrokedContext(Context):
     def set_context(self, gc, renderer):
         glPushAttrib(GL_LINE_BIT)
@@ -86,18 +138,9 @@ class StrokedContext(Context):
         else:
             glLineWidth(width)
 
-        style = gc.get_dashes()[1]
-        if style is None:
-            glLineStipple(1, int('1111111111111111', 2))
-        elif len(style) == 2:
-            glLineStipple(1, int('0000000011111111', 2))
-        elif len(style) == 4:
-            glLineStipple(1, int('0000110000111111', 2))
-        elif style == "dotted":
-            glLineStipple(1, int('0001100011000011', 2))
-        else:
-            warning("Unknown line style: {}".format(style))
-            glLineStipple(1, int('1111111111111111', 2))
+        offset, style = gc.get_dashes()
+        fac, pattern = linestipple_from_style(offset, style)
+        glLineStipple(fac, pattern)
 
     def clean_context(self):
         glPopAttrib()
