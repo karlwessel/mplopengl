@@ -374,9 +374,10 @@ class GPUObjectCache:
 vertexShaderSource = """#version 120
 attribute vec2 pos;
 attribute vec2 shift;
+uniform mat3 trans;
 void main()
-{    
-    gl_Position = gl_ModelViewProjectionMatrix * vec4(pos+shift, 0.0, 1.0);
+{
+    gl_Position = gl_ModelViewProjectionMatrix * vec4((trans*vec3(shift,1)).xy+pos, 0.0, 1.0);
 }"""
 
 fragmentShaderSource = """#version 120
@@ -434,6 +435,10 @@ class Shader:
         loc = self.uniforms[uniform]
         glUniform4f(loc, *args)
 
+    def set_uniform3m(self, uniform, value, transpose=False):
+        loc = self.uniforms[uniform]
+        glUniformMatrix3fv(loc, 1, transpose, value.astype(numpy.float32))
+
     def set_attr_divisor(self, attr, div):
         glVertexAttribDivisor(self.attrs[attr], div)
 
@@ -464,7 +469,7 @@ class RendererGL(RendererBase):
 
         self.particle_shader = Shader(vertexShaderSource, fragmentShaderSource,
                                       {"pos": 0, "shift": 4},
-                                      ["color"])
+                                      ["color", "trans"])
 
     def draw_gouraud_triangle(self, gc, points, colors, transform):
         """
@@ -520,12 +525,13 @@ class RendererGL(RendererBase):
         marker_path = marker_trans.transform_path(marker_path)
         polygons = self.path_to_poly(marker_path)
 
-        positions = [vertices[-2:] for vertices, _ in path.iter_segments(trans, simplify=False)]
+        positions = path.vertices
         arr_data = numpy.array(positions).astype(numpy.float32).tobytes()
         pos_vbo = self._gpu_cache(self.context, hash(arr_data), VBO, arr_data)
 
         with ObjectContext(self.particle_shader) as program, ClippingContext(gc):
             program.bind_attr_vbo("shift", pos_vbo)
+            program.set_uniform3m("trans", trans.get_matrix(), transpose=True)
             program.set_attr_divisor("pos", 0)
             program.set_attr_divisor("shift", 1)
 
@@ -544,6 +550,7 @@ class RendererGL(RendererBase):
                         col = get_stroke_color(gc, self)
                         program.set_uniform4f("color", *col)
                         glDrawArraysInstanced(GL_LINE_STRIP, 0, len(polygon), len(positions))
+        # glPopMatrix()
 
     def repeat_primitive(self, primitive, polygons, positions):
         for x, y in positions:
