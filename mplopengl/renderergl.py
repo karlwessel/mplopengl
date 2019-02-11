@@ -14,7 +14,7 @@ from matplotlib.backend_bases import RendererBase
 from matplotlib.backends import backend_agg
 from matplotlib.font_manager import findfont, get_font
 from matplotlib.mathtext import MathTextParser
-from matplotlib.path import Path, get_paths_extents
+from matplotlib.path import get_paths_extents
 from matplotlib.transforms import Affine2D
 
 MIN_LINE_WIDTH = 1.5
@@ -522,10 +522,11 @@ class RendererGL(RendererBase):
         want to override this method in order to draw the marker only
         once and reuse it multiple times.
         """
-        marker_path = marker_trans.transform_path(marker_path)
-        polygons = self.path_to_poly(marker_path)
-
         positions = path.vertices
+
+        marker_path = marker_trans.transform_path(marker_path)
+        polygons = self.path_to_poly(marker_path, rgbFace is not None)
+
         arr_data = numpy.array(positions).astype(numpy.float32).tobytes()
         pos_vbo = self._gpu_cache(self.context, hash(arr_data), VBO, arr_data)
 
@@ -543,7 +544,7 @@ class RendererGL(RendererBase):
                 if rgbFace is not None:
                     col = get_fill_color(gc, rgbFace)
                     program.set_uniform4f("color", *col)
-                    glDrawArraysInstanced(GL_POLYGON, 0, len(polygon), len(positions))
+                    glDrawArraysInstanced(GL_POLYGON, 0, len(polygon) - 1, len(positions))
 
                 if gc.get_linewidth() > 0:
                     with StrokedContext(gc, self):
@@ -566,45 +567,37 @@ class RendererGL(RendererBase):
             offset += num_vertices
 
     @staticmethod
-    def path_to_poly(path):
-        try:
-            polygons = path.to_polygons(closed_only=False)
-        except TypeError:
-            print(2)
-            polygons = path.to_polygons()
+    def path_to_poly(path, closed=False):
+        polys = path.to_polygons(closed_only=False)
 
-        if not polygons:
-            print(3)
-            polygons = []
-            i = 0
-            while i < len(path.vertices):
-                assert path.codes[i] == 1
-                start = i
-                i += 1
-                while (i < len(path.vertices)
-                       and path.codes[i] == Path.LINETO):
-                    i += 1
-
-                polygon = numpy.array(path.vertices[start:i])
-                if (i < len(path.vertices)
-                        and path.codes[i] == Path.CLOSEPOLY):
-                    polygon = numpy.append(polygon, path.vertices[start])
-
-                polygons.append(polygon)
-
-        return polygons
+        # matplotlibs to_polygons does not always handle closing of polygons correctly
+        # concrete it seems to have problems with closed triangles
+        if closed:
+            poly2 = []
+            for poly in polys:
+                if len(poly) > 2 and numpy.any(poly[0] != poly[-1]):
+                    poly2.append(numpy.append(poly, [poly[0]], axis=0))
+                else:
+                    poly2.append(poly)
+            return poly2
+        return polys
 
     # noinspection PyPep8Naming
     def draw_path(self, gc, path, transform, rgbFace=None):
         path = transform.transform_path(path)
-        polygons = self.path_to_poly(path)
+        polygons = self.path_to_poly(path, rgbFace is not None)
 
         arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
         poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
         with PolygonVBOContext(poly_vbo) as polygons, ClippingContext(gc):
             if rgbFace is not None:
                 with FilledContext(gc, rgbFace):
-                    self.draw_primitive(GL_POLYGON, polygons)
+                    offset = 0
+                    for num_vertices in polygons:
+                        # the returned polygons are closed (first and last vertex are the same)
+                        # so we only need N-1 points for the polygon
+                        glDrawArrays(GL_POLYGON, offset, num_vertices - 1)
+                        offset += num_vertices
 
             if gc.get_linewidth() > 0:
                 with StrokedContext(gc, self), StrokeColorContext(gc, self):
@@ -613,12 +606,17 @@ class RendererGL(RendererBase):
     # draw_path_collection is optional, and we get more correct
     # relative timings by leaving it out. backend implementers concerned with
     # performance will probably want to implement it
-    #     def draw_path_collection(self, gc, master_transform, paths,
-    #                              all_transforms, offsets, offsetTrans,
-    #                              facecolors,
-    #                              edgecolors, linewidths, linestyles,
-    #                              antialiaseds):
-    #         pass
+    # def draw_path_collection(self, gc, master_transform, paths,
+    #                          all_transforms, offsets, offsetTrans,
+    #                          facecolors,
+    #                          edgecolors, linewidths, linestyles,
+    #                          antialiaseds):
+    #     print("collection")
+    #     super().draw_path_collection(gc, master_transform, paths,
+    #                                  all_transforms, offsets, offsetTrans,
+    #                                  facecolors,
+    #                                  edgecolors, linewidths, linestyles,
+    #                                  antialiaseds)
 
     # draw_quad_mesh is optional, and we get more correct
     # relative timings by leaving it out.  backend implementers concerned
