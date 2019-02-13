@@ -213,18 +213,28 @@ class PolygonVBOContext(Context):
 
 
 class Texture:
-    def __init__(self, im, cached=False):
+    def __init__(self, im, cached=False, grey_level=False):
         texture_id = glGenTextures(1)
+        # this is necessary for images with resolution not a multiple of two
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+
         glBindTexture(GL_TEXTURE_2D, texture_id)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+
+        if grey_level:
+            swizzle_mask = [GL_ONE, GL_ONE, GL_ONE, GL_RED]
+            glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle_mask)
+            input_type = GL_RED
+        else:
+            input_type = GL_RGBA
 
         # if no interpolation is chosen we shouldn't "invent" datapoints by interpolation
         # when magnifying
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
 
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, im.shape[1], im.shape[0],
-                     0, GL_RGBA, GL_UNSIGNED_BYTE, im)
+                     0, input_type, GL_UNSIGNED_BYTE, im)
         glBindTexture(GL_TEXTURE_2D, 0)
 
         self.tex_id = texture_id
@@ -325,13 +335,10 @@ class TextTexture(Texture):
         else:
             image, ox, oy, descent = self._text_image(text, prop, dpi)
 
-        im = numpy.ones((*image.shape, 4), dtype=numpy.uint8) * 255
-        im[::-1, :, 3] = image
-
         self.offset = numpy.array([ox, -oy])
         self.descent = descent
 
-        super().__init__(im)
+        super().__init__(image[::-1, :], grey_level=True)
 
     def draw_at(self, x, y, angle, **kwargs):
         angle_off = self.descent * numpy.array([sin(radians(angle)), -cos(radians(angle))])
