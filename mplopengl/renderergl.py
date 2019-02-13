@@ -351,8 +351,11 @@ class TextTextureContext(Context):
 
 
 class GPUObjectCache:
-    def __init__(self):
+    def __init__(self, max_objects=None):
         self._cache = {}
+        self._limit = max_objects
+        if self._limit is not None:
+            self._obj_stack = []
 
     def fetch(self, context, hash_value, factory, *args, **kwargs):
         if context not in self._cache:
@@ -360,11 +363,19 @@ class GPUObjectCache:
         cache = self._cache[context]
 
         if hash_value in cache:
+            if self._limit is not None:
+                i = self._obj_stack.index((hash_value, context))
+                self._obj_stack.append(self._obj_stack.pop(i))
             return cache[hash_value]
 
         obj = factory(*args, **kwargs)
+        if self._limit is not None:
+            while len(self._obj_stack) >= self._limit:
+                o, context = self._obj_stack.pop(0)
+                tmp_cache = self._cache[context]
+                del tmp_cache[o]
+            self._obj_stack.append((hash_value, context))
         cache[hash_value] = obj
-
         return obj
 
     def __call__(self, context, hash_value, factory, *args, **kwargs):
@@ -465,11 +476,18 @@ class RendererGL(RendererBase):
         self.height = height
         self.dpi = dpi
         self.context = randrange(9999999999)
-        self._gpu_cache = GPUObjectCache()
+        self._gpu_cache = GPUObjectCache(200)
+        self._image_cache = GPUObjectCache(10)
 
         self.particle_shader = Shader(vertexShaderSource, fragmentShaderSource,
                                       {"pos": 0, "shift": 4},
                                       ["color", "trans"])
+
+    def option_image_nocomposite(self):
+        return False
+
+    def option_scale_image(self):
+        return True
 
     def draw_gouraud_triangle(self, gc, points, colors, transform):
         """
@@ -523,11 +541,10 @@ class RendererGL(RendererBase):
         once and reuse it multiple times.
         """
         positions = path.vertices
-        if len(positions) == 1: # single markers don't need a particle shader to draw
+        if len(positions) == 1:  # single markers don't need a particle shader to draw
             positions = trans.transform(positions)
             translation = Affine2D().translate(*positions[0])
-            return self.draw_path(gc, marker_path, marker_trans+translation, rgbFace)
-
+            return self.draw_path(gc, marker_path, marker_trans + translation, rgbFace)
 
         marker_path = marker_trans.transform_path(marker_path)
         polygons = self.path_to_poly(marker_path, rgbFace is not None)
@@ -634,9 +651,6 @@ class RendererGL(RendererBase):
     #                        antialiased, edgecolors):
     #         pass
 
-    def option_scale_image(self):
-        return True
-
     def bind_image(self, im):
         texture_id = glGenTextures(1)
         # gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4)
@@ -654,8 +668,8 @@ class RendererGL(RendererBase):
         glDeleteTextures([texture_id])
 
     def draw_image(self, gc, x, y, im, transform=None):
-        tex = self._gpu_cache.fetch(self.context, hash(im.tobytes()),
-                                    Texture, im)
+        tex = self._image_cache.fetch(self.context, hash(im.tobytes()),
+                                      Texture, im)
         with TextureContext(tex, keep=True), ClippingContext(gc):
             tex.draw_at(x, y, transform=transform)
 
