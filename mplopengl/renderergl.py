@@ -523,6 +523,11 @@ class RendererGL(RendererBase):
         once and reuse it multiple times.
         """
         positions = path.vertices
+        if len(positions) == 1: # single markers don't need a particle shader to draw
+            positions = trans.transform(positions)
+            translation = Affine2D().translate(*positions[0])
+            return self.draw_path(gc, marker_path, marker_trans+translation, rgbFace)
+
 
         marker_path = marker_trans.transform_path(marker_path)
         polygons = self.path_to_poly(marker_path, rgbFace is not None)
@@ -541,7 +546,7 @@ class RendererGL(RendererBase):
                 poly_vbo = self._gpu_cache(self.context, hash(arr_data), VBO, arr_data)
                 program.bind_attr_vbo("pos", poly_vbo)
 
-                if rgbFace is not None:
+                if rgbFace is not None and len(polygon) >= 3:
                     col = get_fill_color(gc, rgbFace)
                     program.set_uniform4f("color", *col)
                     glDrawArraysInstanced(GL_POLYGON, 0, len(polygon) - 1, len(positions))
@@ -551,20 +556,6 @@ class RendererGL(RendererBase):
                         col = get_stroke_color(gc, self)
                         program.set_uniform4f("color", *col)
                         glDrawArraysInstanced(GL_LINE_STRIP, 0, len(polygon), len(positions))
-        # glPopMatrix()
-
-    def repeat_primitive(self, primitive, polygons, positions):
-        for x, y in positions:
-            glPushMatrix()
-            glTranslatef(x, y, 0)
-            self.draw_primitive(primitive, polygons)
-            glPopMatrix()
-
-    def draw_primitive(self, primitive, polygons):
-        offset = 0
-        for num_vertices in polygons:
-            glDrawArrays(primitive, offset, num_vertices)
-            offset += num_vertices
 
     @staticmethod
     def path_to_poly(path, closed=False):
@@ -582,10 +573,23 @@ class RendererGL(RendererBase):
             return poly2
         return polys
 
+    def draw_dash(self, gc, polygon):
+        with ClippingContext(gc), StrokedContext(gc, self):
+            col = get_stroke_color(gc, self)
+            glColor4fv(col)
+            glBegin(GL_LINES)
+            glVertex2fv(polygon[0])
+            glVertex2fv(polygon[1])
+            glEnd()
+
     # noinspection PyPep8Naming
     def draw_path(self, gc, path, transform, rgbFace=None):
         path = transform.transform_path(path)
         polygons = self.path_to_poly(path, rgbFace is not None)
+
+        # keep it simple (no VBOs) for a single dash (e.g. tick marks...)
+        if len(polygons) == 1 and len(polygons[0]) == 2:
+            return self.draw_dash(gc, polygons[0])
 
         arr_data = numpy.array(polygons).astype(numpy.float32).tobytes()
         poly_vbo = self._gpu_cache(self.context, hash(arr_data), PolygonVBO, polygons, arr_data)
@@ -601,7 +605,10 @@ class RendererGL(RendererBase):
 
             if gc.get_linewidth() > 0:
                 with StrokedContext(gc, self), StrokeColorContext(gc, self):
-                    self.draw_primitive(GL_LINE_STRIP, polygons)
+                    offset = 0
+                    for num_vertices in polygons:
+                        glDrawArrays(GL_LINE_STRIP, offset, num_vertices)
+                        offset += num_vertices
 
     # draw_path_collection is optional, and we get more correct
     # relative timings by leaving it out. backend implementers concerned with
