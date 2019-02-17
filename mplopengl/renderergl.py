@@ -9,6 +9,7 @@ from random import randrange
 import matplotlib
 import numpy
 from OpenGL.GL import *
+from OpenGL.arrays import vbo
 from matplotlib import rcParams
 from matplotlib.backend_bases import RendererBase
 from matplotlib.backends import backend_agg
@@ -496,6 +497,44 @@ class RendererGL(RendererBase):
     def option_scale_image(self):
         return True
 
+    def draw_gouraud_triangles(self, gc, triangles_array, colors_array,
+                               transform):
+        """
+        Draws a series of Gouraud triangles.
+
+        Parameters
+        ----------
+        triangles_array : array_like, shape=(N, 3, 2)
+            Array of *N* (x, y) points for the triangles.
+
+        colors_array : array_like, shape=(N, 3, 4)
+            Array of *N* RGBA colors for each point of the triangles.
+
+        transform : `matplotlib.transforms.Transform`
+            An affine transform to apply to the points.
+        """
+        vertex_vbo = vbo.VBO(numpy.array(triangles_array, dtype=numpy.float32), usage=GL_STATIC_DRAW)
+        vertex_vbo.bind()
+        glEnableClientState(GL_VERTEX_ARRAY)
+        glVertexPointer(2, GL_FLOAT, 0, vertex_vbo)
+
+        color_vbo = vbo.VBO(numpy.array(colors_array, dtype=numpy.float32), usage=GL_STATIC_DRAW)
+        color_vbo.bind()
+        glEnableClientState(GL_COLOR_ARRAY)
+        glColorPointer(4, GL_FLOAT, 0, color_vbo)
+
+        A = transform.get_matrix()
+        B = numpy.identity(4)
+        B[:2, :2] = A[:2, :2]
+        B[:2, 3] = A[:2, 2]
+        glPushMatrix()
+        glMultMatrixf(B.astype(numpy.float32).transpose())
+        with ClippingContext(gc):
+            glDrawArrays(GL_TRIANGLES, 0, len(triangles_array) * 3)
+        glPopMatrix()
+        glDisableClientState(GL_VERTEX_ARRAY)
+        glDisableClientState(GL_COLOR_ARRAY)
+
     def draw_gouraud_triangle(self, gc, points, colors, transform):
         """
         Draw a Goraud-shaded triangle.
@@ -514,15 +553,21 @@ class RendererGL(RendererBase):
             An affine transform to apply to the points.
 
         """
+        # apply transform
+        A = transform.get_matrix()
+        B = numpy.identity(4)
+        B[:2, :2] = A[:2, :2]
+        B[:2, 3] = A[:2, 2]
+        glPushMatrix()
+        glMultMatrixf(B.astype(numpy.float32).transpose())
 
-        # NOT TESTED!!!
         with ClippingContext(gc):
-            transform.transform(points)
             glBegin(GL_TRIANGLES)
             for i in range(3):
-                glColor4fv(colors[i])
-                glVertex2fv(points[i])
+                glColor4fv(colors[i, :])
+                glVertex2fv(points[i, :])
             glEnd()
+        glPopMatrix()
 
     # noinspection PyPep8Naming
     def draw_markers(self, gc, marker_path, marker_trans, path,
@@ -652,11 +697,31 @@ class RendererGL(RendererBase):
     # draw_quad_mesh is optional, and we get more correct
     # relative timings by leaving it out.  backend implementers concerned
     # with performance will probably want to implement it
-    #     def draw_quad_mesh(self, gc, master_transform, meshWidth,
-    #                        meshHeight,
-    #                        coordinates, offsets, offsetTrans, facecolors,
-    #                        antialiased, edgecolors):
-    #         pass
+    def draw_quad_mesh(self, gc, master_transform, meshWidth,
+                       meshHeight,
+                       coordinates, offsets, offsetTrans, facecolors,
+                       antialiased, edgecolors):
+
+        # apply transform
+        A = master_transform.get_matrix()
+        B = numpy.identity(4)
+        B[:2, :2] = A[:2, :2]
+        B[:2, 3] = A[:2, 2]
+        glPushMatrix()
+        glMultMatrixf(B.astype(numpy.float32).transpose())
+
+        # render quads
+        with ClippingContext(gc):
+            glBegin(GL_QUADS)
+            for row in range(meshHeight):
+                for quad in range(meshWidth):
+                    glColor4fv(facecolors[row * meshWidth + quad])
+                    glVertex2fv(coordinates[row, quad])
+                    glVertex2fv(coordinates[row + 1, quad])
+                    glVertex2fv(coordinates[row + 1, quad + 1])
+                    glVertex2fv(coordinates[row, quad + 1])
+            glEnd()
+        glPopMatrix()
 
     def bind_image(self, im):
         texture_id = glGenTextures(1)
