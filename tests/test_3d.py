@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from matplotlib.testing.decorators import image_comparison
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 
 pytestmark = pytest.mark.backend('module://mplopengl.backend_qtgl')
 
