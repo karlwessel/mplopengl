@@ -95,7 +95,7 @@ class FigureCanvasQtGL(FigureCanvasQT):
 
     def get_renderer(self, clear=False):
         if self.canvas.renderer is None:
-            return RendererGL(self, self.width(), self.height(), self.figure.dpi)
+            return RendererGL(self.width(), self.height(), self.figure.dpi)
         return self.canvas.renderer
 
     renderer = property(get_renderer, None)
