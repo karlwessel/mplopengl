@@ -370,14 +370,20 @@ class GPUObjectCache:
             self._cache[context] = {}
         cache = self._cache[context]
 
+        # check if object is already in cache and return it from there
         if hash_value in cache:
             if self._limit is not None:
+                # push object to back of list
+                # (front of list is destroyed first if cache is full)
                 i = self._obj_stack.index((hash_value, context))
                 self._obj_stack.append(self._obj_stack.pop(i))
             return cache[hash_value]
 
+        # create the object and add it to cache
         obj = factory(*args, **kwargs)
         if self._limit is not None:
+            # if necessary make room for the new object by
+            # destroying old cached objects
             while len(self._obj_stack) >= self._limit:
                 o, context = self._obj_stack.pop(0)
                 tmp_cache = self._cache[context]
@@ -746,8 +752,9 @@ class RendererGL(RendererBase):
             tex.draw_at(x, y, transform=transform)
 
     def draw_text(self, gc, x, y, s, prop, angle, ismath=False, mtext=None):
-        text_image = self._gpu_cache(self.context, hash((s, prop, ismath, self.dpi)),
-                                     TextTexture, s, prop, ismath, self.dpi)
+        text_image = TextTexture(s, prop, ismath, self.dpi)
+        # text_image = self._gpu_cache(self.context, hash((s, prop, ismath, self.dpi, TextTexture)),
+        #                              TextTexture, s, prop, ismath, self.dpi)
         with TextTextureContext(text_image):
             text_image.draw_at(x, self.height - y, angle=angle, col=gc.get_rgb()[:3])
 
