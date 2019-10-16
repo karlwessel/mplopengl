@@ -11,7 +11,7 @@ OpenGL based backend for matplotlib
 Latest versions tested with:
 - matplotlib 3.1.1
 - pyqt 5.13.1
-- numpy 1.17.2 (1.12 install fails) 
+- numpy 1.17.2
 - pyopengl 3.1
 
 Oldest working versions tested with:
