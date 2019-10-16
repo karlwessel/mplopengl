@@ -12,7 +12,7 @@ pytestmark = pytest.mark.backend('module://mplopengl.backend_qtgl')
 
 @image_comparison(baseline_images=['basics_example'],
                   extensions=['png'])
-def test_fonts_example():
+def test_basics_example():
     # SF bug 2852168
     fig = plt.figure()
     x = np.linspace(0, 2 * np.pi, 100)
