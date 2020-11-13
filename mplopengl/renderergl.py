@@ -15,7 +15,7 @@ from matplotlib.backend_bases import RendererBase
 from matplotlib.backends import backend_agg
 from matplotlib.font_manager import findfont, get_font
 from matplotlib.mathtext import MathTextParser
-from matplotlib.path import get_paths_extents
+from matplotlib.path import get_path_collection_extents
 from matplotlib.transforms import Affine2D
 
 MIN_LINE_WIDTH = 1.5
@@ -496,6 +496,7 @@ class RendererGL(RendererBase):
         self.particle_shader = Shader(vertexShaderSource, fragmentShaderSource,
                                       {"pos": 0, "shift": 4},
                                       ["color", "trans"])
+        self.gpu_marker_rendering_threshold = 10000
 
     def option_image_nocomposite(self):
         return False
@@ -606,13 +607,17 @@ class RendererGL(RendererBase):
 
         marker_path = marker_trans.transform_path(marker_path)
         polygons = self.path_to_poly(marker_path, rgbFace is not None)
+        precision = positions.shape[0] < self.gpu_marker_rendering_threshold
+        if precision:
+            positions = trans.transform(positions)
 
         arr_data = numpy.array(positions).astype(numpy.float32).tobytes()
         pos_vbo = self._gpu_cache(self.context, hash(arr_data), VBO, arr_data)
 
         with ObjectContext(self.particle_shader) as program, ClippingContext(gc):
             program.bind_attr_vbo("shift", pos_vbo)
-            program.set_uniform3m("trans", trans.get_matrix(), transpose=True)
+            program.set_uniform3m("trans", Affine2D().get_matrix() if precision else trans.get_matrix(), transpose=True)
+
             program.set_attr_divisor("pos", 0)
             program.set_attr_divisor("shift", 1)
 
