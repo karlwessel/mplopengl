@@ -616,7 +616,7 @@ class RendererGL(RendererBase):
 
         with ObjectContext(self.particle_shader) as program, ClippingContext(gc):
             program.bind_attr_vbo("shift", pos_vbo)
-            program.set_uniform3m("trans", trans.get_matrix() if precision else Affine2D().get_matrix(), transpose=True)
+            program.set_uniform3m("trans", Affine2D().get_matrix() if precision else trans.get_matrix(), transpose=True)
 
             program.set_attr_divisor("pos", 0)
             program.set_attr_divisor("shift", 1)
