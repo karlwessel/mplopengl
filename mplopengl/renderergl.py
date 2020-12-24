@@ -436,8 +436,11 @@ class Shader:
             glBindAttribLocation(program, loc, attr)
 
         glLinkProgram(program)
+        glValidateProgram(program)
         if glGetProgramiv(program, GL_LINK_STATUS) != GL_TRUE:
-            raise RuntimeError(glGetProgramInfoLog(program))
+            log = glGetProgramInfoLog(program)
+            if log:
+                raise RuntimeError(log)
 
         self.uniforms = {}
         for uniform in uniforms:
