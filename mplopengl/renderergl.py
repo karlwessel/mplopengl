@@ -310,7 +310,7 @@ class TextTexture(Texture):
     def _math_tex_image(text, prop, dpi):
         ox, oy, width, height, descent, font_image, used_characters = \
             TextTexture.mathtext_parser.parse(text, dpi, prop)
-        return font_image.as_array(), ox, -oy + 1, descent
+        return numpy.asarray(font_image), ox, -oy + 1, descent
 
     @staticmethod
     def _get_agg_font(prop, dpi):
