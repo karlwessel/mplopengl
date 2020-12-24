@@ -730,6 +730,8 @@ class RendererGL(RendererBase):
         glPopMatrix()
 
     def bind_image(self, im):
+        # TODO: seems this method is never used, remove it?
+
         texture_id = glGenTextures(1)
         # gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4)
         glBindTexture(GL_TEXTURE_2D, texture_id)
@@ -742,6 +744,8 @@ class RendererGL(RendererBase):
         return texture_id
 
     def unbind_image(self, texture_id):
+        # TODO: seems this method is never used, remove it?
+
         glDisable(GL_TEXTURE_2D)
         glDeleteTextures([texture_id])
 
