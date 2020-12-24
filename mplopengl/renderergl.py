@@ -5,6 +5,7 @@ from builtins import NotImplementedError
 from functools import lru_cache
 from math import sin, radians, cos, log2
 from random import randrange
+import logging
 
 import matplotlib
 import numpy
@@ -15,7 +16,6 @@ from matplotlib.backend_bases import RendererBase
 from matplotlib.backends import backend_agg
 from matplotlib.font_manager import findfont, get_font
 from matplotlib.mathtext import MathTextParser
-from matplotlib.path import get_paths_extents
 from matplotlib.transforms import Affine2D
 
 MIN_LINE_WIDTH = 1.5
@@ -158,11 +158,7 @@ class ClippingContext(Context):
 
         clippath, clippath_trans = gc.get_clip_path()
         if clippath is not None:
-            glEnable(GL_SCISSOR_TEST)
-            bbox = get_paths_extents([clippath_trans.transform_path(clippath)],
-                                     [Affine2D()])
-            glScissor(int(bbox.x0), int(bbox.y0), int(bbox.width),
-                      int(bbox.height))
+            logging.info("Clip pathes are not yet supported")
 
     def clean_context(self):
         glPopAttrib()
