@@ -1,4 +1,6 @@
 result_images
 venv
+env
+__pycache__
 *.egg-info
 .idea
