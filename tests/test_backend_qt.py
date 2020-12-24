@@ -24,16 +24,7 @@ def mpl_test_settings(qt_module, mpl_test_settings):
 @pytest.fixture
 def qt_module(request):
     backend, = request.node.get_closest_marker('backend').args
-    if backend == 'Qt4Agg':
-        try:
-            import PyQt4
-        # RuntimeError if PyQt5 already imported.
-        except (ImportError, RuntimeError):
-            try:
-                import PySide
-            except ImportError:
-                pytest.skip("Failed to import a Qt4 binding.")
-    elif backend == 'Qt5Agg':
+    if backend == 'Qt5Agg':
         try:
             import PyQt5
         # RuntimeError if PyQt4 already imported.
@@ -48,18 +39,7 @@ def qt_module(request):
     qt_compat = pytest.importorskip('matplotlib.backends.qt_compat')
     QtCore = qt_compat.QtCore
 
-    if backend == 'Qt4Agg':
-        try:
-            py_qt_ver = int(QtCore.PYQT_VERSION_STR.split('.')[0])
-        except AttributeError:
-            py_qt_ver = QtCore.__version_info__[0]
-
-        if py_qt_ver != 4:
-            pytest.skip(reason='Qt4 is not available')
-
-        from matplotlib.backends.backend_qt4 import (
-            MODIFIER_KEYS, SUPER, ALT, CTRL, SHIFT)
-    elif backend == 'Qt5Agg':
+    if backend == 'Qt5Agg':
         from matplotlib.backends.backend_qt5 import (
             MODIFIER_KEYS, SUPER, ALT, CTRL, SHIFT)
 
@@ -94,7 +74,6 @@ def qt_mods(request):
 
 @pytest.mark.parametrize('backend', [
     # Note: the value is irrelevant; the important part is the marker.
-    pytest.param('Qt4Agg', marks=pytest.mark.backend('Qt4Agg')),
     pytest.param('Qt5Agg', marks=pytest.mark.backend('Qt5Agg')),
 ])
 def test_fig_close(backend):
@@ -195,7 +174,6 @@ def test_fig_signals(qt_module):
 )
 @pytest.mark.parametrize('backend', [
     # Note: the value is irrelevant; the important part is the marker.
-    pytest.param('Qt4Agg', marks=pytest.mark.backend('Qt4Agg')),
     pytest.param('Qt5Agg', marks=pytest.mark.backend('Qt5Agg')),
 ])
 def test_correct_key(backend, qt_key, qt_mods, answer):
