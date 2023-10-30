@@ -2,34 +2,34 @@
 OpenGL based backend for matplotlib
 
 ## Requirements
-- matplotlib >= 3.1
-- pyopengl >= 3.1
-- pyqt5
+- matplotlib
+- PyOpenGL
+- PyQt6
 - numpy
 - at least OpenGL 2.1 capable graphics device (most machines have that)
 
 Latest versions tested with:
-- matplotlib 3.1.1
-- pyqt 5.13.1
-- numpy 1.17.2
-- pyopengl 3.1
+- matplotlib 3.8.0
+- PyOpenGL 3.1.7
+- PyQt6 6.4.2
+- numpy 1.26.1
 
 Oldest working versions tested with:
-- matplotlib 3.1
-- pyopengl 3.1
-- pyqt5 5.7.1
-- numpy 1.14.5
+- matplotlib 3.8.0
+- PyOpenGL 3.1.7
+- PyQt6 6.4.2
+- numpy 1.26.1
 
 Tested with:
-- Linux (archlinux)
+- Linux (Debian)
 
 Tested on:
-- Mesa DRI Intel(R) Ironlake Mobile (Thinkpad 410s integrated graphics), OpenGL v2.1
+- NVIDIA Quadro P620/PCIe, Debian 11 & KDE Plasma, OpenGL ES 3.2
 
 ## Installation
 You can install directly from the github repository using pip with:
 ```bash
-pip install git+https://github.com/karlwessel/mplopengl.git
+pip install git+https://github.com/buokae/mplopengl.git
 ```
 and use the OpenGL based backend with
 ```python
