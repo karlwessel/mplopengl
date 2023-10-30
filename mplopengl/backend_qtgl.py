@@ -5,10 +5,11 @@ Created on Feb 4, 2019
 """
 
 from OpenGL.GL import *
-from PyQt5.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal
+from PyQt6 import QtOpenGLWidgets
 from matplotlib.backend_bases import GraphicsContextBase
-from matplotlib.backends.backend_qt5 import FigureCanvasQT
-from matplotlib.backends.backend_qt5 import FigureManagerQT
+from matplotlib.backends.backend_qt import FigureCanvasQT
+from matplotlib.backends.backend_qt import FigureManagerQT
 from matplotlib.backends.qt_compat import QtWidgets
 
 from mplopengl.renderergl import RendererGL
@@ -40,7 +41,7 @@ class GraphicsContextQtGL(GraphicsContextBase):
 
 class FigureCanvasQtGL(FigureCanvasQT):
     # noinspection PyPep8Naming
-    class GLCanvas(QtWidgets.QOpenGLWidget):
+    class GLCanvas(QtOpenGLWidgets.QOpenGLWidget):
         available = pyqtSignal()
 
         def __init__(self, figure):
