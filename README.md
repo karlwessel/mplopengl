@@ -1,3 +1,10 @@
+# Not actively maintainend
+While it still works (state of 2024), this library is not actively maintained. 
+
+Mainly because I don't use python for plotting anymore. 
+
+Secondly because I it didn't really fix the performance issues I had when plotting. In most cases the actual rendering is not the bottleneck but the matplotlib pipeline coming before it (state of 2019, love to stand corrected if that changed). This library can only improve the speed of the rendering.
+
 # mplopengl
 OpenGL based backend for matplotlib
 
