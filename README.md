@@ -9,10 +9,11 @@ OpenGL based backend for matplotlib
 - at least OpenGL 2.1 capable graphics device (most machines have that)
 
 Latest versions tested with:
-- matplotlib 3.1.1
-- pyqt 5.13.1
-- numpy 1.17.2
-- pyopengl 3.1
+- matplotlib 3.9.2
+- pyqt 5.15.11
+- numpy 2.1.2
+- pyopengl 3.1.7
+- python 3.12.7
 
 Oldest working versions tested with:
 - matplotlib 3.1
@@ -24,7 +25,8 @@ Tested with:
 - Linux (archlinux)
 
 Tested on:
-- Mesa DRI Intel(R) Ironlake Mobile (Thinkpad 410s integrated graphics), OpenGL v2.1
+- Mesa DRI Intel Ironlake Mobile (Thinkpad 410s integrated graphics), OpenGL v2.1
+- Mesa Intel(R) HD Graphics 520 (SKL GT2), OpenGL v4.6
 
 ## Installation
 You can install directly from the github repository using pip with:
